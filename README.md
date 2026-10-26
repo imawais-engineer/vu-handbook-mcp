@@ -1,66 +1,109 @@
-# VU Handbook MCP
+# vu-handbook-mcp
 
-A Model Context Protocol server that gives any MCP-capable AI two scoped,
-citable knowledge sources about Virtual University of Pakistan students:
+**An MCP server that gives AI assistants citable, read-only access to the Virtual University of Pakistan Student Handbook and a structured guide to the VU LMS.**
 
-1. **Student Handbook** (<https://handbook.vu.edu.pk/>) — policy and regulations
-2. **VU LMS Guide** (`docs/lms/`) — reverse-engineered map of
-   <https://vulms.vu.edu.pk> — every page, tab, form and where to click
+[![Secret scan](https://github.com/imawais-engineer/vu-handbook-mcp/actions/workflows/security-scan.yml/badge.svg)](https://github.com/imawais-engineer/vu-handbook-mcp/actions/workflows/security-scan.yml)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue) ![MCP](https://img.shields.io/badge/MCP-stdio%20%7C%20Streamable%20HTTP-black)
 
-Server name: `vu-student-support`. Live student data (Notice Board, To Do
-Calendar deadlines, grades) is never served: that flows through the paste
-ingestion pipeline (`ingest/`) into agent sessions.
+Built by [Muhammad Awais](https://imawais.engineer) · Aspiring Forward Deployed AI Engineer, currently AI Automation Engineer.
 
-This is **step one** of the multi-agent student support system: the handbook
-is the authoritative source for nearly all student guidance, so it gets its
-own MCP server that every agent can share.
+## Overview
 
-## Coverage
+Students ask the same policy questions every semester: semester freeze, unfair means, grade improvement, fee challans, where a form lives in the LMS. The answers exist in the official handbook (<https://handbook.vu.edu.pk/>), but it is a legacy ASP.NET frameset site that AI assistants cannot read reliably.
+
+`vu-handbook-mcp` crawls the full handbook into a local SQLite FTS5 snapshot and exposes it through the [Model Context Protocol](https://modelcontextprotocol.io), so Claude, Cursor, ChatGPT or any agent framework can:
+
+- **search** 310 handbook pages with ranked, cited results (URL + breadcrumb),
+- **read** any page in full with parent/child/sibling navigation,
+- **browse** the table of contents before answering,
+- **locate** anything in the VU LMS portal (Grade Book, Account Book, Course Selection, Student Services) via a reverse-engineered LMS guide,
+- **refuse to guess**: empty results return an explicit escalate-to-VU-Support note.
+
+It serves public reference data only: no credentials, no student records, read-only database.
 
 | | |
 |---|---|
-| Table-of-contents nodes | 319 (1 root, 27 branches, 310 pages) |
-| Pages indexed | 310 / 310 fetched, 0 failures |
-| Extracted text | 1,086,576 characters |
-| Depth | 5 levels (e.g. Home → Examinations Department → Conduct of Examination → Unfair Means → Acts of Unfair Means) |
-| Full-text index | SQLite FTS5, title-weighted BM25 |
-| Extras | 1 policy PDF extracted (VU Plagiarism Policy) |
+| Corpus | 319 TOC nodes, 310 pages, ~1.09 M characters, 5 levels deep, + VU Plagiarism Policy PDF |
+| Search | SQLite FTS5, title-weighted BM25, 60 % term-coverage precision filter |
+| Retrieval eval | **12/12** expected pages in top-3 on real student questions |
+| Tests | 73 stdio protocol checks · 21 HTTP transport checks · ingest parity tests (Python + JS) |
+| Transports | stdio and Streamable HTTP (DNS-rebinding protection, `/healthz`, Docker) |
 
-Serve from a local snapshot so agent turns are fast, deterministic, and do not
-hammer the VU web server.
+## Tools at a glance
 
-## Quick start
+| Tool | Purpose |
+|---|---|
+| `vu_handbook_search(query, limit=8)` | Ranked full-text search with snippets and citations |
+| `vu_handbook_get(page)` | Full page by id, title or URL, with navigation |
+| `vu_handbook_contents(path="", depth=2)` | Browse the handbook table of contents |
+| `vu_lms_contents()` | Map of every VU LMS section |
+| `vu_lms_get(section)` | One LMS section in full |
+| `vu_lms_search(query, limit=5)` | Search the LMS guide and operational notes |
+
+Resources: `vu-handbook://toc`, `vu-handbook://page/{page_id}`, `vu-handbook://stats`, `vu-lms://sections`, `vu-lms://guide`. Details below.
+
+## Install
+
+Requires Python 3.10+.
 
 ```bash
-pip install .                        # installs 'vu-handbook-mcp' (pins mcp<2)
-vu-handbook-mcp                      # stdio transport
-vu-handbook-mcp --http               # Streamable HTTP transport
-
-# or without installing:
-pip install "mcp>=1.13,<2"
-python3 mcp_server.py [--http ...]
+git clone https://github.com/imawais-engineer/vu-handbook-mcp.git
+cd vu-handbook-mcp
+pip install .                 # installs the `vu-handbook-mcp` command (pins mcp<2)
+vu-handbook-mcp               # stdio transport
+vu-handbook-mcp --http        # Streamable HTTP on 127.0.0.1:8000/mcp
 ```
 
-> The server is written against the **mcp 1.x API** (verified on 1.30.0).
-> mcp 2.x renamed `FastMCP`, so every entry point pins `<2`.
+Without installing: `pip install "mcp>=1.13,<2" && python3 mcp_server.py`.
+The snapshot in `data/` ships with the repo; point elsewhere with `VU_HANDBOOK_DATA=/path/to/data`.
 
-### Register with an MCP client
+> Written against the **mcp 1.x API** (verified on 1.30.0). mcp 2.x renamed `FastMCP`, so every entry point pins `<2`.
 
-Claude Desktop / any stdio MCP client:
+## Connect a client
+
+**Claude Desktop** (`claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "vu-handbook": {
       "command": "python3",
-      "args": ["/absolute/path/to/mcp_server.py"],
-      "cwd": "/absolute/path/to/project"
+      "args": ["/absolute/path/to/vu-handbook-mcp/mcp_server.py"]
     }
   }
 }
 ```
 
-From code (LangGraph, OpenAI Agents SDK, plain `mcp` client):
+**Claude Code:**
+
+```bash
+claude mcp add vu-handbook -- python3 /absolute/path/to/vu-handbook-mcp/mcp_server.py
+```
+
+**Cursor** (`~/.cursor/mcp.json` or `.cursor/mcp.json` in a project):
+
+```json
+{
+  "mcpServers": {
+    "vu-handbook": {
+      "command": "python3",
+      "args": ["/absolute/path/to/vu-handbook-mcp/mcp_server.py"]
+    }
+  }
+}
+```
+
+**ChatGPT / remote clients:** run with `--http` behind HTTPS (Docker image below) and register `https://your-host/mcp` as a remote MCP server.
+
+## Usage
+
+Example prompts once connected:
+
+- "According to the VU handbook, how do I apply for a semester freeze? Cite the page."
+- "What counts as unfair means in VU exams and what are the penalties?"
+- "Where in the VU LMS do I download my fee challan?"
+
+From code:
 
 ```python
 from mcp import ClientSession, StdioServerParameters
@@ -75,34 +118,7 @@ async with stdio_client(params) as (r, w):
         page = await s.call_tool("vu_handbook_get", {"page": 64})
 ```
 
-### Attach to any MCP client
-
-**Claude Desktop / Claude Code (local, stdio):**
-
-```json
-{
-  "mcpServers": {
-    "vu-student-support": {
-      "command": "python3",
-      "args": ["/absolute/path/to/mcp_server.py"],
-      "cwd": "/absolute/path/to/project"
-    }
-  }
-}
-```
-
-**Claude Code:** `claude mcp add vu-student-support -- python3 /path/to/mcp_server.py`
-
-**ChatGPT / remote clients (Streamable HTTP):** host the server publicly
-(Docker image or `--http --host 0.0.0.0` behind HTTPS) and register the
-`https://your-host/mcp` endpoint as a remote MCP server. Loopback stays
-locked by default; grant your hostname with `--allow-host`.
-
-**Anything else:** stdio and Streamable HTTP are the two standard MCP
-transports — any client supporting either connects with the config above.
-The server has no auth requirements and serves only public reference data.
-
-### Run over HTTP (production)
+## Run over HTTP (production)
 
 ```bash
 python3 mcp_server.py --http --host 0.0.0.0 --port 8000 --allow-host vumcp.example.com
@@ -152,13 +168,7 @@ crawler — refresh on the host with `tools/refresh.py`, then rebuild.
 
 ## Paste ingestion (`ingest/`)
 
-The read-only front door of the support system (see `docs/VISION.md               initial product vision (v0.1, modifiable)
-docs/lms/VU_LMS_Guide.md     full VULMS reverse-engineering map (16 sections)
-docs/lms/OPERATIONAL_NOTES.md dynamic-source cadence (To Do windows, date sheet)
-ingest/                      paste ingestion: clean -> structure -> store
-tools/VISION.md`): the
-student copies a logged-in VULMS page and pastes it; we clean, structure and
-session-store it. No credentials are ever requested or handled.
+A companion pipeline for agents built on top of this server (see `docs/VISION.md`): a student copies a logged-in VULMS page and pastes it; the pipeline cleans, structures and session-stores it. No credentials are ever requested or handled, and the MCP server never serves live student data.
 
 ```bash
 python3 ingest/ingest.py --session s1 paste.txt     # -> vu-paste/1 JSON (+ stored)
@@ -242,7 +252,7 @@ a working snapshot directly:
 
 1. crawl into `data/.staging/` (fresh TOC + all pages, 0 fetch failures required)
 2. sanity gates — file presence, page count (>= 290), char count (>= 500k)
-3. protocol gate — `tests/test_mcp.py` (53 checks) run against **staging**
+3. protocol gate — `tests/test_mcp.py` (73 checks) run against **staging**
 4. retrieval gate — `tests/eval_queries.py`, at least **10/12** expected pages in top-3
 5. only then swap — current files copied to `data/.last-good/`, then
    atomically replaced (`os.replace`)
@@ -304,7 +314,7 @@ with title > breadcrumb > headings > body weighting for ordering, then a
 precision filter: a page must contain at least **60% of the query's
 significant terms** (`ceil(3n/5)`).
 
-Measured on `tests/eval_queries.py` — 12 realistic student questions:
+Measured on `tests/eval_queries.py`, 12 realistic student questions:
 
 ```
 retrieval: 12/12 expected pages in top-3 (100%)
@@ -334,10 +344,20 @@ tools/refresh.py              gated refresh: staging -> tests -> atomic swap
 tools/vu_handbook_client.py   TOC expansion + page fetch (postbacks, retries)
 tools/extract.py              HTML/PDF -> markdown, encoding handling
 tools/crawl_handbook.py       build data/ snapshot
-tests/test_mcp.py             end-to-end protocol tests, stdio (53 checks)
-tests/test_http.py            HTTP transport tests (20 checks)
+tests/test_mcp.py             end-to-end protocol tests, stdio (73 checks)
+tests/test_http.py            HTTP transport tests (21 checks)
 tests/eval_queries.py         retrieval quality eval (12 questions)
 pyproject.toml                 packaging + 'vu-handbook-mcp' entry point
 Dockerfile                     production image (Streamable HTTP)
 data/                         generated snapshot (refresh: data/.last-good/)
+docs/                         product vision, VU LMS guide, operational notes
+ingest/                       paste ingestion: clean -> structure -> store
 ```
+
+## License
+
+No license has been granted yet; all rights reserved by the author. Handbook content belongs to the Virtual University of Pakistan and is included as a snapshot for reference and citation.
+
+---
+
+[imawais.engineer](https://imawais.engineer) · [GitHub](https://github.com/imawais-engineer)

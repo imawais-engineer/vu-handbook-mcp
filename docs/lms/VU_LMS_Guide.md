@@ -641,7 +641,7 @@ Each course card shows:
 - VU LMS uses **ASP.NET WebForms** with `__doPostBack` for navigation
 - All internal navigation uses JavaScript postbacks, not direct URLs
 - External links (Mail, Contact, Help) use direct URLs
-- Student ID format: `<XX000000000>` (2 letters + 9 digits, e.g., BC240404771)
+- Student ID format: `<XX000000000>` (2 letters + 9 digits, e.g., BC000000000)
 - Course codes: `CSxxx`, `MCMxxx`, `ENGxxx`, `MTHxxx`, etc.
 - Each course has its own directory: `/Courses/{CODE}/`
 - Support System is a separate ticketing platform with its own login/session

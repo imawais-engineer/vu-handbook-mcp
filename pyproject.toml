@@ -9,7 +9,11 @@ description = "MCP server exposing the Virtual University of Pakistan Student Ha
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = ["mcp>=1.13,<2"]
-keywords = ["mcp", "model-context-protocol", "virtual-university", "rag", "handbook"]
+keywords = ["mcp", "model-context-protocol", "virtual-university", "rag", "handbook", "ai-agents"]
+
+[project.urls]
+Homepage = "https://imawais.engineer"
+Repository = "https://github.com/imawais-engineer/vu-handbook-mcp"
 
 [project.scripts]
 vu-handbook-mcp = "mcp_server:main"
