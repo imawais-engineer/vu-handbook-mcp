@@ -118,6 +118,10 @@ async with stdio_client(params) as (r, w):
         page = await s.call_tool("vu_handbook_get", {"page": 64})
 ```
 
+## Deploy (Azure VM, HTTPS, token auth)
+
+A ready deployment kit lives in [`deploy/`](deploy/): Docker + Caddy (automatic HTTPS), bearer-token auth and rate limiting (`deploy/serve.py`), cloud-init, az CLI scripts, systemd alternative. Step-by-step guide with costs, smoke test and client configs: [`deploy/DEPLOY_AZURE.md`](deploy/DEPLOY_AZURE.md).
+
 ## Run over HTTP (production)
 
 ```bash
