@@ -15,7 +15,7 @@ RUN pip install "mcp>=1.13,<2" \
 
 WORKDIR /app
 COPY --chown=root:root mcp_server.py ./
-COPY --chown=root:root data/handbook.db data/toc.json ./data/
+COPY --chown=root:root data/handbook.db data/toc.json data/pages.jsonl ./data/
 COPY --chown=root:root docs/lms/ ./docs/lms/
 COPY --chown=root:root deploy/serve.py ./deploy/serve.py
 

@@ -30,7 +30,8 @@ from mcp.client.streamable_http import streamablehttp_client  # noqa: E402
 PORT = int(os.environ.get("VU_HTTP_TEST_PORT", "8123"))
 BASE = f"http://127.0.0.1:{PORT}"
 EXPECTED_TOOLS = {"vu_handbook_contents", "vu_handbook_search", "vu_handbook_get",
-                  "vu_lms_contents", "vu_lms_search", "vu_lms_get"}
+                  "vu_lms_contents", "vu_lms_search", "vu_lms_get",
+                  "vu_ask", "vu_key_dates_and_fees", "vu_gpa_calculator", "vu_course_load_check"}
 
 results: list[tuple[str, bool, str]] = []
 
@@ -71,7 +72,7 @@ async def test_single_session() -> None:
 
             tools = await session.list_tools()
             names = {t.name for t in tools.tools}
-            check("http: exactly 6 tools", names == EXPECTED_TOOLS, str(names))
+            check(f"http: exactly {len(EXPECTED_TOOLS)} tools", names == EXPECTED_TOOLS, str(names))
 
             res = await session.call_tool("vu_handbook_search", {"query": "how to submit assignment", "limit": 5})
             data = json.loads(res.content[0].text)

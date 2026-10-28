@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir "mcp>=1.13,<2"
 
 COPY mcp_server.py README.md ./
 COPY data/ ./data/
+COPY docs/lms/ ./docs/lms/
 
 EXPOSE 8000
 
