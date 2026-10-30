@@ -1,0 +1,34 @@
+# Automatic HTTPS (Let's Encrypt) for the MCP endpoint.
+# MCP_PUBLIC_HOST is either your own subdomain (e.g. vumcp.imawais.engineer, A record -> VM IP)
+# or the free Azure DNS label: <label>.<region>.cloudapp.azure.com
+{
+	email {$ACME_EMAIL}
+}
+
+{$MCP_PUBLIC_HOST} {
+	encode zstd gzip
+
+	request_body {
+		max_size 1MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# Auth + rate limiting are enforced by deploy/serve.py; Caddy only terminates TLS.
+	reverse_proxy {$MCP_UPSTREAM:app:8000} {
+		flush_interval -1
+		transport http {
+			read_timeout 0
+		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

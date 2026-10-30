@@ -25,3 +25,7 @@ credentials*.json
 service-account*.json
 local.properties
 .DS_Store
+
+# deployment secrets
+deploy/.env
+deploy/.deploy-history

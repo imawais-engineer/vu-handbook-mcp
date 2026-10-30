@@ -62,9 +62,11 @@ async def main() -> int:
             tools = await s.list_tools()
             names = sorted(t.name for t in tools.tools)
             print("\n[1] tools/list")
-            check("6 tools exposed", len(names) == 6, str(names))
+            check("10 tools exposed", len(names) == 10, str(names))
             for expected in ("vu_handbook_contents", "vu_handbook_search", "vu_handbook_get",
-                             "vu_lms_contents", "vu_lms_search", "vu_lms_get"):
+                             "vu_lms_contents", "vu_lms_search", "vu_lms_get", "vu_ask",
+                             "vu_key_dates_and_fees", "vu_gpa_calculator",
+                             "vu_course_load_check"):
                 check(f"tool present: {expected}", expected in names, str(names))
             for t in tools.tools:
                 check(f"described: {t.name}", bool(t.description) and len(t.description) > 80)

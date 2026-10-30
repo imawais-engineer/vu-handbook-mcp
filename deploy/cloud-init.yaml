@@ -1,0 +1,33 @@
+#cloud-config
+# First-boot self-configuration for an Ubuntu 22.04/24.04 Azure VM.
+# azure/create-vm.sh replaces __MCP_PUBLIC_HOST__ and __ACME_EMAIL__ before passing this as --custom-data.
+# The bearer token is generated ON the VM (never leaves it unless you read it via SSH / run-command).
+package_update: true
+package_upgrade: true
+packages:
+  - git
+  - docker.io
+  - docker-compose-v2
+  - unattended-upgrades
+
+write_files:
+  - path: /etc/docker/daemon.json
+    content: |
+      { "log-driver": "json-file", "log-opts": { "max-size": "10m", "max-file": "3" } }
+
+runcmd:
+  - systemctl enable --now docker
+  - systemctl restart docker
+  - git clone --depth 50 https://github.com/imawais-engineer/vu-handbook-mcp.git /opt/vu-handbook-mcp
+  - |
+    cd /opt/vu-handbook-mcp/deploy
+    TOKEN=$(openssl rand -base64 48 | tr -d '=+/\n' | cut -c1-48)
+    sed -e "s|^MCP_PUBLIC_HOST=.*|MCP_PUBLIC_HOST=__MCP_PUBLIC_HOST__|" \
+        -e "s|^ACME_EMAIL=.*|ACME_EMAIL=__ACME_EMAIL__|" \
+        -e "s|^MCP_BEARER_TOKENS=.*|MCP_BEARER_TOKENS=${TOKEN}|" .env.example > .env
+    chmod 600 .env
+    unset TOKEN
+  - cd /opt/vu-handbook-mcp && docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+  - dpkg-reconfigure -f noninteractive unattended-upgrades
+
+final_message: "vu-handbook-mcp provisioned after $UPTIME seconds"

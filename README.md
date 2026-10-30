@@ -26,19 +26,27 @@ It serves public reference data only: no credentials, no student records, read-o
 | Corpus | 319 TOC nodes, 310 pages, ~1.09 M characters, 5 levels deep, + VU Plagiarism Policy PDF |
 | Search | SQLite FTS5, title-weighted BM25, 60 % term-coverage precision filter |
 | Retrieval eval | **12/12** expected pages in top-3 on real student questions |
-| Tests | 73 stdio protocol checks · 21 HTTP transport checks · ingest parity tests (Python + JS) |
+| Tests | 81 stdio protocol checks · 21 HTTP transport checks · 44 pytest unit tests · ingest parity tests (Python + JS) |
 | Transports | stdio and Streamable HTTP (DNS-rebinding protection, `/healthz`, Docker) |
 
 ## Tools at a glance
 
-| Tool | Purpose |
-|---|---|
-| `vu_handbook_search(query, limit=8)` | Ranked full-text search with snippets and citations |
+| Tool | Purpose | Use it for |
+|---|---|---|
+| `vu_ask(question, program=None, batch=None, limit=3)` | **Start here.** One call over both corpora: best pages with trimmed, cited excerpts, the next tool to call, and answering rules | any student question |
+| `vu_handbook_search(query, limit=8, program=None, batch=None)` | Ranked full-text search with snippets and citations; optional program/batch filter picks the right "w.e.f Batch" version | rules, eligibility, exam policy |
+| `vu_key_dates_and_fees(topic, program=None)` | Cited fee amounts and deadline rules (freeze, rechecking, date sheet, readmission, refunds, tuition table rows) | "how much / by when" |
+| `vu_gpa_calculator(courses, previous_cgpa=None, previous_credit_hours=None)` | SGPA/CGPA using the grading scheme parsed from Academic Rules and Regulations §20–21 | GPA from grades or marks |
+| `vu_course_load_check(semester_number, cgpa, is_final_semester=False, program=None, batch=None)` | Credit-hour limit read from the student's own program page (version chosen by batch) | "how many credit hours can I take" |
 | `vu_handbook_get(page)` | Full page by id, title or URL, with navigation |
 | `vu_handbook_contents(path="", depth=2)` | Browse the handbook table of contents |
 | `vu_lms_contents()` | Map of every VU LMS section |
 | `vu_lms_get(section)` | One LMS section in full |
 | `vu_lms_search(query, limit=5)` | Search the LMS guide and operational notes |
+
+Old tools keep their exact behaviour when the new optional arguments are not
+passed (a test compares them against the previous release). Rules-type
+outputs carry `data_last_updated` (newest crawl timestamp of the snapshot).
 
 Resources: `vu-handbook://toc`, `vu-handbook://page/{page_id}`, `vu-handbook://stats`, `vu-lms://sections`, `vu-lms://guide`. Details below.
 
@@ -117,6 +125,10 @@ async with stdio_client(params) as (r, w):
                                  {"query": "how do I apply for semester freeze"})
         page = await s.call_tool("vu_handbook_get", {"page": 64})
 ```
+
+## Deploy (Azure VM, HTTPS, token auth)
+
+A ready deployment kit lives in [`deploy/`](deploy/): Docker + Caddy (automatic HTTPS), bearer-token auth and rate limiting (`deploy/serve.py`), cloud-init, az CLI scripts, systemd alternative. Step-by-step guide with costs, smoke test and client configs: [`deploy/DEPLOY_AZURE.md`](deploy/DEPLOY_AZURE.md).
 
 ## Run over HTTP (production)
 
@@ -213,6 +225,46 @@ capped at 40 000 chars with `truncated`), and `navigation` (`parent`,
 
 An ambiguous title raises an error listing candidate ids rather than silently
 returning the wrong page.
+
+### `vu_handbook_search(..., program=None, batch=None)`
+`program` accepts names and aliases: `"BS Software Engineering"`, `"BSSE"`,
+`"BSCS"`, `"BS-Lateral IT"`, `"ADP Computer Science"`, `"MSCS"`, `"MBA"`.
+`batch` accepts a VU batch code (`"2404"`; `YY02` = Spring, `YY04` = Fall),
+`"Fall 2024"`, `"S25"` or a year (`"2024"` = both terms). The program's pages
+rank first; the version shown as `selected` is the newest
+`[w.e.f Batch NNNN]` page that started on or before the batch (unlabelled
+pages are the oldest version). Each result gets `applies_to`; `variants`
+lists every version and `note` says when the choice is still ambiguous.
+
+### `vu_ask(question, program=None, batch=None, limit=3)`
+Searches the handbook and the LMS guide, routes by intent ("where/click" →
+LMS, rules → handbook), drops other-batch versions once a batch is known, and
+returns per result: `source`, `title`, `breadcrumb`, `url`, an `excerpt`
+(the most relevant paragraphs, ≤ ~1500 chars) and `read_more` (the exact
+`vu_handbook_get` / `vu_lms_get` call). Also `suggested_tools` (calculator /
+fees / load check when the question needs them) and `how_to_answer`.
+
+### `vu_key_dates_and_fees(topic, program=None)`
+Topic-mapped extraction over the fee pages (Fee Structure Local/Overseas,
+Schedule of Other Charges, installments, blocking) and deadline-rule pages
+(freeze/unfreeze, rechecking, rescheduling, date sheet, FYP late submission,
+readmission, security refund, add/drop in Academic Rules §9–10). Each fact is
+cited. The handbook states deadlines relative to the Academic Calendar; this
+semester's actual dates are not in the data and the tool says so.
+
+### `vu_gpa_calculator(courses, ...)`
+`courses` is a list of `{grade, credit_hours}` or `{marks, credit_hours}`.
+VU grade points depend on marks (B+ = 3.33–3.65), so letters alone give an
+SGPA/CGPA *range*; marks give the exact value via the §20.1 formula (tested
+against every row of the §20.2 table).
+
+### `vu_course_load_check(semester_number, cgpa, ...)`
+Reads the "credit hour limits" block of the program page chosen by
+program + batch and applies it (two wording templates are parsed, covering 87
+of 215 program pages). Otherwise it returns the verbatim rule text, or says
+the limits are missing from the snapshot (44 pages, mostly
+`[w.e.f Batch 2504]`, where the live page shows them as an image/table).
+Guidance only: the LMS Course Selection page shows the real limit.
 
 ## LMS tools
 
